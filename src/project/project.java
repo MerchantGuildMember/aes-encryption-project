@@ -7,6 +7,7 @@ import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.util.Arrays;
 import java.util.Scanner;
 
 public class project {
@@ -17,7 +18,7 @@ public class project {
     private static final String dataPath = "data/";
     private static String fileName = "";
     private static String outputFileName = "";
-    private static File outputFile = new File(outputFileName);
+//    private static File outputFile = new File(outputFileName);
 
     public static Scanner keyboard = new Scanner(System.in);
 
@@ -43,13 +44,12 @@ public class project {
                         System.out.println("filename: "+fileName);
                         outputFileName = fileName.substring(0,fileName.indexOf(".")) + "_enc.txt";
                         System.out.println("output: " + outputFileName);
-                        createOutputFile();
                         groupedEncryption();
                     }
                     System.out.println("reached encrypt");
                 } else if(input.equals("2")) {
                     input = "-1";
-//                    decryptFile();
+                    groupedDecryption();
                     System.out.println("reached decrypt");
                 } else if(input.equals("3")) {
                     exitProgram();
@@ -75,8 +75,8 @@ public class project {
         return canFileName;
     }
 
-    public static void createOutputFile() {
-        File outputFile = new File(outputFileName);
+    public static File createOutputFile(String fileName) {
+        File outputFile = new File(fileName);
         if(!outputFile.exists()) {
             try {
                 if(outputFile.createNewFile()) {
@@ -87,6 +87,7 @@ public class project {
                 throw new RuntimeException(e);
             }
         }
+        return outputFile;
     }
 
     public static File fileToEncrypt(String path) {
@@ -94,9 +95,14 @@ public class project {
         return file;
     }
 
+    public static File fileToDecrypt(String path) {
+        File file = new File(outputFileName);
+        return file;
+    }
+
     public static void groupedEncryption() {
         try {
-            encryptFile(algorithm,generateKey(numberAES),generateIv(),fileToEncrypt(fileName),outputFile);
+            encryptFile(algorithm,generateKey(numberAES),generateIv(),fileToEncrypt(fileName),createOutputFile(outputFileName));
         } catch (IOException e) {
             throw new RuntimeException(e);
         } catch (NoSuchPaddingException e) {
@@ -113,6 +119,26 @@ public class project {
             throw new RuntimeException(e);
         }
     }
+    public static void groupedDecryption() {
+        try {
+            decryptFile(algorithm,generateKey(numberAES),generateIv(),fileToDecrypt(outputFileName));
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        } catch (NoSuchPaddingException e) {
+            throw new RuntimeException(e);
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException(e);
+        } catch (InvalidAlgorithmParameterException e) {
+            throw new RuntimeException(e);
+        } catch (InvalidKeyException e) {
+            throw new RuntimeException(e);
+        } catch (BadPaddingException e) {
+            throw new RuntimeException(e);
+        } catch (IllegalBlockSizeException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
 
     public static SecretKey generateKey(int n) throws NoSuchAlgorithmException {
         KeyGenerator keyGenerator = KeyGenerator.getInstance("AES");
@@ -152,6 +178,29 @@ public class project {
         outputStream.close();
     }
 
+    public static void decryptFile(String algorithm, SecretKey key, GCMParameterSpec iv,
+                                   File inputFile) throws IOException, NoSuchPaddingException,
+            NoSuchAlgorithmException, InvalidAlgorithmParameterException, InvalidKeyException,
+            BadPaddingException, IllegalBlockSizeException {
+
+        Cipher cipher = Cipher.getInstance(algorithm);
+        cipher.init(Cipher.DECRYPT_MODE, key, iv);
+        FileInputStream inputStream = new FileInputStream(inputFile);
+        byte[] buffer = new byte[64];
+        int bytesRead;
+        while ((bytesRead = inputStream.read(buffer)) != -1) {
+            byte[] output = cipher.update(buffer, 0, bytesRead);
+            if (output != null) {
+                System.out.print(Arrays.toString(output));
+            }
+        }
+        byte[] outputBytes = cipher.doFinal();
+        if (outputBytes != null) {
+            System.out.print(Arrays.toString(outputBytes));
+        }
+        inputStream.close();
+    }
+
     public static void exitProgram() {
         System.out.println("\n....Shutting down....");
         System.exit(0);
@@ -165,8 +214,9 @@ public class project {
 
         System.out.println("\n\n\n"+divider);
         for(int i = 0; i < menu.length(); i++) {
-            System.out.print(menu.charAt(i));
             try {
+                Thread.sleep(project.menuDelayMS);
+                System.out.print(menu.charAt(i));
                 Thread.sleep(project.menuDelayMS);
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
