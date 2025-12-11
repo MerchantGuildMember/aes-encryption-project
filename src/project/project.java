@@ -16,16 +16,22 @@ import java.util.Scanner;
 
 public class project {
 
+
+    // global variables
     public static Scanner scanner = new Scanner(System.in);
     private static final String ALGORITHM = "AES/GCM/NoPadding";
     private static final int n = 128;
     private static SecretKey key;
+    // filepath locations
     private static final String DATA_DIR = "data/";
     private static final String KEY_FILE = DATA_DIR + "key.txt";
     private static final String IV_FILE = DATA_DIR + "iv.txt";
+
     private static GCMParameterSpec iv;
 
-    static void main() {
+    static void main(String[] args) { // readded since intellij is gaslighting me, though it runs without
+
+        // using menu util to display the user interface
         String title = "\nAES Encryption/Decryption menu";
         String[] menu_options = {
                 "[1] Encrypt a File",
@@ -41,12 +47,14 @@ public class project {
                 MenuUtil.displayMenu(menu_options, title);
                 System.out.print("Enter: ");
                 int user_input = 0;
+                // tries to get user input, if it's anything but an integer or outside the confounds of the menu options; it will go again
                 try {
                     user_input = MenuUtil.getMenuChoice(menu_options.length);
                 } catch (InputMismatchException e) {
                     System.out.println("Invalid input, try again.");
                     continue;
                 }
+                // switch case for all the methods
                 switch(user_input) {
                     case 1:
                         encryptFirstStage();
@@ -72,6 +80,7 @@ public class project {
                         break;
                     case 7:
                         System.out.println("Shutting program down...");
+                        scanner.close();
                         System.exit(0);
                         break;
                     default:
@@ -79,23 +88,29 @@ public class project {
                 }
 
             }
+            // sometimes got triggered by errors inside of methods called in the switch case.
         } catch (Exception e) {
             System.out.println("Unexpected error has occurred: "+e.getMessage());
             System.out.println("Returning to main menu\n");
         }
     }
 
+        // prepping phase for encryption
     public static void encryptFirstStage() throws NoSuchAlgorithmException, InvalidAlgorithmParameterException, NoSuchPaddingException, IllegalBlockSizeException, IOException, BadPaddingException, InvalidKeyException {
             System.out.println("\n File Encryption ");
             System.out.print("Enter the filename to encrypt: ");
             String file_name = scanner.nextLine().trim();
 
+            // if file_name is blank, asks again
             while(file_name.isEmpty()) {
                 System.out.println("Error: Filename cannot be empty!");
                 System.out.print("Enter the filename to encrypt: ");
                 file_name = scanner.nextLine().trim();
             }
 
+            // if file name doesn't exist, returns to menu
+            // haven't tried but i imagine it should let the user return to the menu
+            // to input a valid file into the data/ folder to try again
             File file = new File(DATA_DIR+file_name);
             if(!file.exists()) {
                 System.out.println("Error File 'data/"+ file_name + "' not found");
@@ -103,10 +118,13 @@ public class project {
                 return;
             }
 
+            // creates the file that all the encrypted text will go to
+            // so for e.g test1.txt will spawn an offshoot called enc_test1.txt
             File encrypted_file = new File(DATA_DIR+"enc_"+file_name);
             if(!encrypted_file.exists()) {
                 try {
                     encrypted_file.createNewFile();
+                    System.out.println("File called "+encrypted_file.getName()+" has been created");
                 } catch (IOException e) {
                     System.out.println("Failed to create file, returning to main menu!");
                     return;
@@ -120,6 +138,8 @@ public class project {
                 }
             }
 
+            // if the key or iv haven't been updated since program began
+            // then it will generate new ones before encryption begins
             if(Objects.isNull(key)) {
 //                System.out.println("reaching null check 123123");
                 key = generateKey(n);
@@ -127,7 +147,7 @@ public class project {
             if(Objects.isNull(iv)) {
                 iv = generateIv();
             }
-
+            // the real fun part of encryption starts here
         encryptFile(ALGORITHM,key,iv,file,encrypted_file);
 
     }
@@ -137,16 +157,20 @@ public class project {
         System.out.print("Enter the filename to decrypt: ");
         String file_name = scanner.nextLine().trim();
 
+        // if file name is empty, ask again
         while(file_name.isEmpty()) {
             System.out.println("Error: Filename cannot be empty!");
             System.out.print("Enter the filename to decrypt: ");
             file_name = scanner.nextLine().trim();
         }
+        // if file name doesnt start with enc_, prompt user to fix their mistake and try again
+        // this is so the user correctly decrypts the right file
         if(!file_name.startsWith("enc_")) {
             System.out.println("Error: Filename is missing leading \"enc_\", fix this before trying again");
             return;
         }
 
+        // if the encrypted file doesn't exist, then go out to menu
         File file = new File(DATA_DIR+file_name);
         if(!file.exists()) {
             System.out.println("Error File 'data/"+ file_name + "' not found");
@@ -201,21 +225,32 @@ public class project {
             NoSuchAlgorithmException, InvalidAlgorithmParameterException, InvalidKeyException,
             BadPaddingException, IllegalBlockSizeException {
 
-        // instantiating a cipher instance with "AES/GCM/NoPadding"
+        // instantiating cipher instance with "AES/GCM/NoPadding"
         Cipher cipher = Cipher.getInstance(algorithm);
         cipher.init(Cipher.ENCRYPT_MODE, key, iv);
+
+        // reading to and from file
         FileInputStream input_stream = new FileInputStream(input_file);
         FileOutputStream output_stream = new FileOutputStream(output_file);
+
+        // reads all bytes into buffer
         byte[] buffer = input_stream.readAllBytes();
+        // ^^
         int bytes_read;
+        // process in chunks until end of stream
         while ((bytes_read = input_stream.read(buffer)) != -1) {
+            // process the current chunk through cipher, results in encrypted output
+            // this is more so meant for larger files but eh
             byte[] output = cipher.update(buffer, 0, bytes_read);
             if (output != null) {
+                // write it to output stream
                 output_stream.write(output);
             }
         }
         byte[] output_bytes = cipher.doFinal(buffer);
         output_stream.write(output_bytes);
+
+        // close the file streams
         input_stream.close();
         output_stream.close();
 
@@ -234,6 +269,7 @@ public class project {
             BadPaddingException, IllegalBlockSizeException {
 
         Cipher cipher = Cipher.getInstance(algorithm);
+        // decrypt mode
         cipher.init(Cipher.DECRYPT_MODE, key, iv);
         FileInputStream input_stream = new FileInputStream(input_file);
         FileOutputStream output_stream = new FileOutputStream(output_file);
@@ -260,8 +296,8 @@ public class project {
             return key;
         }
 
-        KeyGenerator keyGenerator = KeyGenerator.getInstance("AES");
-        keyGenerator.init(n);
+        KeyGenerator keyGenerator = KeyGenerator.getInstance("AES"); // specifies for aes en/decryption
+        keyGenerator.init(n); // in bits, what size key is desired, for this projcet 128 is chosen
         SecretKey key = keyGenerator.generateKey();
         return key;
     }
