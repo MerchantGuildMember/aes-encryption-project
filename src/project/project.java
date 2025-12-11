@@ -1,150 +1,354 @@
+
 package project;
 
+import java.io.*;
 import javax.crypto.*;
 import javax.crypto.spec.GCMParameterSpec;
-import java.io.*;
+import javax.crypto.spec.SecretKeySpec;
 import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
-import java.util.Arrays;
+import java.util.InputMismatchException;
+import java.util.Objects;
 import java.util.Scanner;
 
+
 public class project {
-    private static boolean firstStartUp = true;
-    private static int menuDelayMS = 20;
-    private static final int numberAES = 128;
-    private static final String algorithm = "AES/GCM/NoPadding";
-    private static final String dataPath = "data/";
-    private static String fileName = "";
-    private static String outputFileName = "";
-//    private static File outputFile = new File(outputFileName);
 
-    public static Scanner keyboard = new Scanner(System.in);
+    public static Scanner scanner = new Scanner(System.in);
+    private static final String ALGORITHM = "AES/GCM/NoPadding";
+    private static final int n = 128;
+    private static SecretKey key;
+    private static final String DATA_DIR = "data/";
+    private static final String KEY_FILE = DATA_DIR + "key.txt";
+    private static final String IV_FILE = DATA_DIR + "iv.txt";
+    private static GCMParameterSpec iv;
 
-
-    public static void main(String[] args) {
-        String input;
-
-        System.out.println("Current working directory: " + System.getProperty("user.dir"));
-
-
-        do{
-                menu();
-
-                System.out.print("Your input: ");
-                input = keyboard.nextLine();
-                if(input.equals("1")) {
-                    input = "-1";
-                    String canFileName = fileNameInput();
-                    if(canFileName.equals("-1")) {
-                        System.out.println("User exited file name input...");
-                    } else {
-                        fileName = dataPath + canFileName;
-                        System.out.println("filename: "+fileName);
-                        outputFileName = fileName.substring(0,fileName.indexOf(".")) + "_enc.txt";
-                        System.out.println("output: " + outputFileName);
-                        groupedEncryption();
-                    }
-                    System.out.println("reached encrypt");
-                } else if(input.equals("2")) {
-                    input = "-1";
-                    groupedDecryption();
-                    System.out.println("reached decrypt");
-                } else if(input.equals("3")) {
-                    exitProgram();
-                    System.out.println("reached exit");
-                } else {
-                    input = "-1";
-                    System.out.println("Invalid input, please try again!\n");
+    static void main() {
+        String title = "\nAES Encryption/Decryption menu";
+        String[] menu_options = {
+                "[1] Encrypt a File",
+                "[2] Decrypt a File",
+                "[3] Export key (do after running [1])",
+                "[4] Export IV (do after running [1])",
+                "[5] Import key",
+                "[6] Import IV",
+                "[7] Exit the program",
+        };
+        try {
+            while(true) {
+                MenuUtil.displayMenu(menu_options, title);
+                System.out.print("Enter: ");
+                int user_input = 0;
+                try {
+                    user_input = MenuUtil.getMenuChoice(menu_options.length);
+                } catch (InputMismatchException e) {
+                    System.out.println("Invalid input, try again.");
+                    continue;
                 }
-            } while(!input.equals("1") || !input.equals("2") ||!input.equals("3") );
+                switch(user_input) {
+                    case 1:
+                        encryptFirstStage();
+                        break;
+                    case 2:
+                        decryptFirstStage();
+                        break;
+                    case 3:
+                        System.out.println("Trying to export to key.txt ...");
+                        exportKey();
+                        break;
+                    case 4:
+                        System.out.println("Trying to export to iv.txt ...");
+                        exportIV();
+                        break;
+                    case 5:
+                        System.out.println("Trying to import from key.txt ...");
+                        importKey();
+                        break;
+                    case 6:
+                        System.out.println("Trying to import from iv.txt ...");
+                        importIV();
+                        break;
+                    case 7:
+                        System.out.println("Shutting program down...");
+                        System.exit(0);
+                        break;
+                    default:
+                        break;
+                }
+
+            }
+        } catch (Exception e) {
+            System.out.println("Unexpected error has occurred: "+e.getMessage());
+            System.out.println("Returning to main menu\n");
+        }
+    }
+
+    public static void encryptFirstStage() throws NoSuchAlgorithmException, InvalidAlgorithmParameterException, NoSuchPaddingException, IllegalBlockSizeException, IOException, BadPaddingException, InvalidKeyException {
+            System.out.println("\n File Encryption ");
+            System.out.print("Enter the filename to encrypt: ");
+            String file_name = scanner.nextLine().trim();
+
+            while(file_name.isEmpty()) {
+                System.out.println("Error: Filename cannot be empty!");
+                System.out.print("Enter the filename to encrypt: ");
+                file_name = scanner.nextLine().trim();
+            }
+
+            File file = new File(DATA_DIR+file_name);
+            if(!file.exists()) {
+                System.out.println("Error File 'data/"+ file_name + "' not found");
+                System.out.println("Ensure the file exists and that you have the right name");
+                return;
+            }
+
+            File encrypted_file = new File(DATA_DIR+"enc_"+file_name);
+            if(!encrypted_file.exists()) {
+                try {
+                    encrypted_file.createNewFile();
+                } catch (IOException e) {
+                    System.out.println("Failed to create file, returning to main menu!");
+                    return;
+                }
+            } else {
+                System.out.print("File " + encrypted_file.getName() + " already exists. Overwrite? (y/n): ");
+                String response = scanner.nextLine().trim().toLowerCase();
+                if(!response.equals("y")) {
+                    System.out.println("Operation cancelled");
+                    return;
+                }
+            }
+
+            if(Objects.isNull(key)) {
+//                System.out.println("reaching null check 123123");
+                key = generateKey(n);
+            }
+            if(Objects.isNull(iv)) {
+                iv = generateIv();
+            }
+
+        encryptFile(ALGORITHM,key,iv,file,encrypted_file);
 
     }
-    public static String fileNameInput() {
-        System.out.println("Assuming text files are in data folder.");
-        System.out.println("Please input file name, make sure to include file extension | [-1] to exit: ");
-        String canFileName = "";
-        do {
-            canFileName = keyboard.nextLine();
-            if(canFileName.equals("-1")) {return canFileName;}
-            else if(!(new File(dataPath + canFileName).exists())) {System.out.println("File not found: " + new File(dataPath + canFileName).getAbsolutePath());}
-            System.out.println(canFileName);
-        } while(!canFileName.endsWith(".txt") || !(new File(dataPath + canFileName).exists()));
 
-        return canFileName;
-    }
+    public static void decryptFirstStage() throws NoSuchAlgorithmException, InvalidAlgorithmParameterException, NoSuchPaddingException, IllegalBlockSizeException, IOException, BadPaddingException, InvalidKeyException {
+        System.out.println("\nFile Decryption");
+        System.out.print("Enter the filename to decrypt: ");
+        String file_name = scanner.nextLine().trim();
 
-    public static File createOutputFile(String fileName) {
-        File outputFile = new File(fileName);
-        if(!outputFile.exists()) {
+        while(file_name.isEmpty()) {
+            System.out.println("Error: Filename cannot be empty!");
+            System.out.print("Enter the filename to decrypt: ");
+            file_name = scanner.nextLine().trim();
+        }
+        if(!file_name.startsWith("enc_")) {
+            System.out.println("Error: Filename is missing leading \"enc_\", fix this before trying again");
+            return;
+        }
+
+        File file = new File(DATA_DIR+file_name);
+        if(!file.exists()) {
+            System.out.println("Error File 'data/"+ file_name + "' not found");
+            System.out.println("Ensure the file exists and that you have the right name");
+            return;
+        }
+
+        // assuming user is going to be reading from a file they just encrypted
+        File decrypted_file = null;
+        if(file_name.startsWith("enc_")) {
+            decrypted_file = new File(DATA_DIR+"dec_"+(file_name.substring(file_name.indexOf("_") + 1)));
+        } else {
+            decrypted_file = new File(DATA_DIR+"dec_"+file_name);
+        }
+        if(!decrypted_file.exists()) {
             try {
-                if(outputFile.createNewFile()) {
-                    System.out.println("File created: " + outputFile.getName());
-                }
+                decrypted_file.createNewFile();
             } catch (IOException e) {
-                System.out.println("ERROR: Unable to create new file!");
-                throw new RuntimeException(e);
+                System.out.println("Failed to create file, returning to main menu!");
+                return;
+            }
+        } else {
+            System.out.print("File " + decrypted_file.getName() + " already exists. Overwrite? (y/n): ");
+            String response = scanner.nextLine().trim().toLowerCase();
+            if(!response.equals("y")) {
+                System.out.println("Operation cancelled");
+                return;
             }
         }
-        return outputFile;
-    }
 
-    public static File fileToEncrypt(String path) {
-        File file = new File(path);
-        return file;
-    }
-
-    public static File fileToDecrypt(String path) {
-        File file = new File(outputFileName);
-        return file;
-    }
-
-    public static void groupedEncryption() {
-        try {
-            encryptFile(algorithm,generateKey(numberAES),generateIv(),fileToEncrypt(fileName),createOutputFile(outputFileName));
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        } catch (NoSuchPaddingException e) {
-            throw new RuntimeException(e);
-        } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException(e);
-        } catch (InvalidAlgorithmParameterException e) {
-            throw new RuntimeException(e);
-        } catch (InvalidKeyException e) {
-            throw new RuntimeException(e);
-        } catch (BadPaddingException e) {
-            throw new RuntimeException(e);
-        } catch (IllegalBlockSizeException e) {
-            throw new RuntimeException(e);
+        if (Objects.isNull(key)) {
+            System.out.println("Error: No key loaded. Please import a key first (option 5).");
+            return;
         }
-    }
-    public static void groupedDecryption() {
-        try {
-            decryptFile(algorithm,generateKey(numberAES),generateIv(),fileToDecrypt(outputFileName));
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        } catch (NoSuchPaddingException e) {
-            throw new RuntimeException(e);
-        } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException(e);
-        } catch (InvalidAlgorithmParameterException e) {
-            throw new RuntimeException(e);
-        } catch (InvalidKeyException e) {
-            throw new RuntimeException(e);
-        } catch (BadPaddingException e) {
-            throw new RuntimeException(e);
-        } catch (IllegalBlockSizeException e) {
-            throw new RuntimeException(e);
+        if (Objects.isNull(iv)) {
+            System.out.println("Error: No IV loaded. Please import an IV first (option 6).");
+            return;
         }
+
+        decryptFile(ALGORITHM,key,iv,file,decrypted_file);
+
     }
 
+    //    Sharifi, R. (2025) 'Java AES encryption and decryption', Baeldung. Available at: https://www.baeldung.com/java-aes-encryption-decryption (Accessed: 10 December 2025).
+
+    public static void encryptFile(String algorithm,
+                                   SecretKey key,
+                                   GCMParameterSpec iv,
+                                   File input_file,
+                                   File output_file)
+            throws IOException, NoSuchPaddingException,
+            NoSuchAlgorithmException, InvalidAlgorithmParameterException, InvalidKeyException,
+            BadPaddingException, IllegalBlockSizeException {
+
+        // instantiating a cipher instance with "AES/GCM/NoPadding"
+        Cipher cipher = Cipher.getInstance(algorithm);
+        cipher.init(Cipher.ENCRYPT_MODE, key, iv);
+        FileInputStream input_stream = new FileInputStream(input_file);
+        FileOutputStream output_stream = new FileOutputStream(output_file);
+        byte[] buffer = input_stream.readAllBytes();
+        int bytes_read;
+        while ((bytes_read = input_stream.read(buffer)) != -1) {
+            byte[] output = cipher.update(buffer, 0, bytes_read);
+            if (output != null) {
+                output_stream.write(output);
+            }
+        }
+        byte[] output_bytes = cipher.doFinal(buffer);
+        output_stream.write(output_bytes);
+        input_stream.close();
+        output_stream.close();
+
+        System.out.println("Check data folder for the file");
+    }
+
+    //    Sharifi, R. (2025) 'Java AES encryption and decryption', Baeldung. Available at: https://www.baeldung.com/java-aes-encryption-decryption (Accessed: 10 December 2025).
+
+    public static void decryptFile(String algorithm,
+                                   SecretKey key,
+                                   GCMParameterSpec iv,
+                                   File input_file,
+                                   File output_file)
+            throws IOException, NoSuchPaddingException,
+            NoSuchAlgorithmException, InvalidAlgorithmParameterException, InvalidKeyException,
+            BadPaddingException, IllegalBlockSizeException {
+
+        Cipher cipher = Cipher.getInstance(algorithm);
+        cipher.init(Cipher.DECRYPT_MODE, key, iv);
+        FileInputStream input_stream = new FileInputStream(input_file);
+        FileOutputStream output_stream = new FileOutputStream(output_file);
+        byte[] buffer = new byte[64];
+        int bytes_read;
+        while ((bytes_read = input_stream.read(buffer)) != -1) {
+            byte[] output = cipher.update(buffer, 0, bytes_read);
+            if (output != null) {
+                output_stream.write(output);
+            }
+        }
+        byte[] output_bytes = cipher.doFinal();
+        if (output_bytes != null) {
+            output_stream.write(output_bytes);
+        }
+        input_stream.close();
+        output_stream.close();
+
+        System.out.println("Check data folder for the file");
+    }
 
     public static SecretKey generateKey(int n) throws NoSuchAlgorithmException {
+        if(!Objects.isNull(key)) {
+            return key;
+        }
+
         KeyGenerator keyGenerator = KeyGenerator.getInstance("AES");
         keyGenerator.init(n);
         SecretKey key = keyGenerator.generateKey();
         return key;
+    }
+
+    public static void exportKey() {
+        if(Objects.isNull(key)) {
+            System.out.println("Key is null, generate a key first and try again.");
+            return;
+        }
+        byte[] output_bytes = key.getEncoded();
+        File output_file = new File(KEY_FILE);
+        if(!output_file.exists()) {
+            try {
+                output_file.createNewFile();
+            } catch (IOException e) {
+                System.out.println("Failed to create exporting key file! Exiting program...");
+                throw new RuntimeException(e);
+            }
+        }
+        try {
+            FileOutputStream output_stream = new FileOutputStream(output_file);
+            output_stream.write(output_bytes);
+            output_stream.close();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        System.out.println("Exported!\n");
+    }
+    public static void exportIV() {
+        if(Objects.isNull(iv)) {
+            System.out.println("IV is null, generate key first and try again.");
+            return;
+        }
+
+        byte[] output_bytes = iv.getIV();
+        File output_file = new File(IV_FILE);
+        if(!output_file.exists()) {
+            try {
+                output_file.createNewFile();
+            } catch (IOException e) {
+                System.out.println("Failed to create exporting iv file! Exiting program...");
+                throw new RuntimeException(e);
+            }
+        }
+        try {
+            FileOutputStream output_stream = new FileOutputStream(output_file);
+            output_stream.write(output_bytes);
+            output_stream.close();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        System.out.println("Exported!\n");
+    }
+
+    public static void importKey() {
+        File input_file = new File(KEY_FILE);
+        if(!input_file.exists()) {
+            System.out.println("File doesn't exist");
+            return;
+        }
+        try {
+            FileInputStream input_stream = new FileInputStream(input_file);
+            byte[] input_bytes = input_stream.readAllBytes();
+            input_stream.close();
+            System.out.println("Imported");
+            key = new SecretKeySpec(input_bytes, "AES");
+        } catch (IOException e) {
+            throw new RuntimeException("Error reading key file: " + e.getMessage());
+        }
+    }
+
+    public static void importIV() {
+        byte[] input_bytes = new byte[12];
+        File input_file = new File(IV_FILE);
+        if(!input_file.exists()) {
+            System.out.println("File doesn't exist");
+            return;
+        }
+        try {
+            FileInputStream input_stream = new FileInputStream(input_file);
+            input_stream.read(input_bytes);
+            input_stream.close();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        System.out.println("Imported");
+        iv = new GCMParameterSpec(128, input_bytes);
     }
 
     public static GCMParameterSpec generateIv() {
@@ -153,79 +357,5 @@ public class project {
         return new GCMParameterSpec(128, iv);
     }
 
-    public static void encryptFile(String algorithm, SecretKey key, GCMParameterSpec iv,
-                                   File inputFile, File outputFile) throws IOException, NoSuchPaddingException,
-            NoSuchAlgorithmException, InvalidAlgorithmParameterException, InvalidKeyException,
-            BadPaddingException, IllegalBlockSizeException {
-
-        Cipher cipher = Cipher.getInstance(algorithm);
-        cipher.init(Cipher.ENCRYPT_MODE, key, iv);
-        FileInputStream inputStream = new FileInputStream(inputFile);
-        FileOutputStream outputStream = new FileOutputStream(outputFile);
-        byte[] buffer = new byte[64];
-        int bytesRead;
-        while ((bytesRead = inputStream.read(buffer)) != -1) {
-            byte[] output = cipher.update(buffer, 0, bytesRead);
-            if (output != null) {
-                outputStream.write(output);
-            }
-        }
-        byte[] outputBytes = cipher.doFinal();
-        if (outputBytes != null) {
-            outputStream.write(outputBytes);
-        }
-        inputStream.close();
-        outputStream.close();
-    }
-
-    public static void decryptFile(String algorithm, SecretKey key, GCMParameterSpec iv,
-                                   File inputFile) throws IOException, NoSuchPaddingException,
-            NoSuchAlgorithmException, InvalidAlgorithmParameterException, InvalidKeyException,
-            BadPaddingException, IllegalBlockSizeException {
-
-        Cipher cipher = Cipher.getInstance(algorithm);
-        cipher.init(Cipher.DECRYPT_MODE, key, iv);
-        FileInputStream inputStream = new FileInputStream(inputFile);
-        byte[] buffer = new byte[64];
-        int bytesRead;
-        while ((bytesRead = inputStream.read(buffer)) != -1) {
-            byte[] output = cipher.update(buffer, 0, bytesRead);
-            if (output != null) {
-                System.out.print(Arrays.toString(output));
-            }
-        }
-        byte[] outputBytes = cipher.doFinal();
-        if (outputBytes != null) {
-            System.out.print(Arrays.toString(outputBytes));
-        }
-        inputStream.close();
-    }
-
-    public static void exitProgram() {
-        System.out.println("\n....Shutting down....");
-        System.exit(0);
-    }
-
-    public static void menu() {
-        String divider = "==========================================";
-        String menu = "Greetings, please choose one of the following options:\n[1] Encrypt a File\n[2] Decrypt a File\n[3] Quit\n";
-
-        if(!firstStartUp) { menuDelayMS = 0;}
-
-        System.out.println("\n\n\n"+divider);
-        for(int i = 0; i < menu.length(); i++) {
-            try {
-                Thread.sleep(project.menuDelayMS);
-                System.out.print(menu.charAt(i));
-                Thread.sleep(project.menuDelayMS);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
-        }
-        System.out.println(divider);
-
-        firstStartUp = false;
-
-    }
 
 }
